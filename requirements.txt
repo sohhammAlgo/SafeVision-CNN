@@ -1,0 +1,15 @@
+tensorflow
+opencv-python
+numpy
+pandas
+matplotlib
+seaborn
+scikit-learn
+ultralytics
+streamlit
+pillow
+pyyaml
+python-dotenv
+sqlalchemy
+pytest
+plotly
