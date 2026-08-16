@@ -15,5 +15,8 @@ models/*.onnx
 outputs/
 logs/
 
+PPE-detection---yolo-11-1
+yolov8n.pt
+
 .pytest_cache/
 .streamlit/
