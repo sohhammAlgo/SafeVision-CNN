@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Tuple
+from typing import List, Tuple
 
 
 @dataclass
@@ -34,7 +34,12 @@ class TrackedPerson:
 @dataclass
 class ComplianceResult:
     track_id: int
+
     helmet: bool
     mask: bool
     vest: bool
+
     compliant: bool
+
+    missing_ppe: List[str]
+    severity: str

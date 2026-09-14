@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from ultralytics import YOLO
 
 
@@ -7,9 +5,7 @@ from ultralytics import YOLO
 # Configuration
 # ============================================
 
-DATASET_CONFIG = (
-    "data/raw/ppe_detection/data.yaml"
-)
+DATASET_CONFIG = "data/raw/ppe_detection/data.yaml"
 
 MODEL_NAME = "yolov8n.pt"
 
@@ -34,13 +30,15 @@ print("Starting PPE training...")
 results = model.train(
     data=DATASET_CONFIG,
 
-    epochs=50,
+    epochs=30,
 
     imgsz=640,
 
     batch=8,
 
-    patience=10,
+    workers=2,
+
+    patience=5,
 
     project=OUTPUT_DIR,
 
