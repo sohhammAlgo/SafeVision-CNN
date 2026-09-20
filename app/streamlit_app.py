@@ -1,8 +1,19 @@
 import json
 import cv2
+import numpy as np
 import streamlit as st
+import sys
+from pathlib import Path
 
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from streamlit_webrtc import (
+    webrtc_streamer,
+    VideoProcessorBase
+)
 
 from src.detection.pipeline import SafetyPipeline
 from src.detection.visualization import draw_detections
@@ -11,6 +22,7 @@ from src.db.repository import (
     get_recent_violations,
     get_violation_statistics
 )
+from src.explainability.gradcam import GradCAM
 
 
 # ============================================
@@ -60,7 +72,7 @@ confidence = st.sidebar.slider(
 
 
 # ============================================
-# Load Pipeline
+# Load Safety Pipeline
 # ============================================
 
 @st.cache_resource
@@ -69,6 +81,7 @@ def load_pipeline():
 
 
 try:
+
     pipeline = load_pipeline()
 
 except FileNotFoundError as error:
@@ -81,23 +94,51 @@ except FileNotFoundError as error:
 
 
 # ============================================
+# Load Grad-CAM
+# ============================================
+
+@st.cache_resource
+def load_gradcam():
+    return GradCAM()
+
+
+try:
+
+    gradcam = load_gradcam()
+
+except Exception as error:
+
+    st.error(
+        f"Grad-CAM initialization failed: {error}"
+    )
+
+    st.stop()
+
+
+# ============================================
 # Live Camera Processor
 # ============================================
 
 class SafeVisionProcessor(VideoProcessorBase):
 
     def __init__(self):
+
         self.pipeline = pipeline
+        self.confidence = confidence
 
     def recv(self, frame):
 
         # WebRTC frame → OpenCV BGR
-        image = frame.to_ndarray(format="bgr24")
+        image = frame.to_ndarray(
+            format="bgr24"
+        )
 
-        # Process through SafeVision pipeline
-        pipeline_output = self.pipeline.process_frame(
-            image,
-            confidence=confidence
+        # Process frame
+        pipeline_output = (
+            self.pipeline.process_frame(
+                image,
+                confidence=self.confidence
+            )
         )
 
         # Draw detections
@@ -106,7 +147,7 @@ class SafeVisionProcessor(VideoProcessorBase):
             pipeline_output
         )
 
-        # OpenCV BGR → WebRTC frame
+        # Return processed frame
         return frame.from_ndarray(
             annotated_frame,
             format="bgr24"
@@ -139,12 +180,20 @@ st.divider()
 
 st.subheader("⚠️ Recent Violations")
 
+
 if st.button("🔄 Refresh Dashboard"):
+
     st.rerun()
+
+
 violations = get_recent_violations(
     limit=20
 )
 
+
+# ============================================
+# Violation Summary
+# ============================================
 
 col1, col2, col3 = st.columns(3)
 
@@ -187,13 +236,23 @@ with col3:
         critical
     )
 
+
+# ============================================
+# PPE Violation Breakdown
+# ============================================
+
 st.subheader("📊 PPE Violation Breakdown")
 
-summary, ppe_rows = get_violation_statistics()
+
+summary, ppe_rows = (
+    get_violation_statistics()
+)
+
 
 helmet_violations = 0
 mask_violations = 0
 vest_violations = 0
+
 
 for row in ppe_rows:
 
@@ -204,30 +263,41 @@ for row in ppe_rows:
     count = row["count"]
 
     if "helmet" in missing_ppe:
+
         helmet_violations += count
 
     if "mask" in missing_ppe:
+
         mask_violations += count
 
     if "vest" in missing_ppe:
+
         vest_violations += count
 
 
-ppe_col1, ppe_col2, ppe_col3 = st.columns(3)
+ppe_col1, ppe_col2, ppe_col3 = (
+    st.columns(3)
+)
+
 
 with ppe_col1:
+
     st.metric(
         "🪖 Helmet Violations",
         helmet_violations
     )
 
+
 with ppe_col2:
+
     st.metric(
         "😷 Mask Violations",
         mask_violations
     )
 
+
 with ppe_col3:
+
     st.metric(
         "🦺 Vest Violations",
         vest_violations
@@ -237,6 +307,9 @@ with ppe_col3:
 # ============================================
 # Violation List
 # ============================================
+
+st.subheader("📋 Violation History")
+
 
 if not violations:
 
@@ -254,7 +327,99 @@ else:
 
         st.write(
             f"**Track ID:** {row['track_id']} | "
-            f"**Missing:** {', '.join(missing_ppe)} | "
+            f"**Missing:** "
+            f"{', '.join(missing_ppe)} | "
             f"**Severity:** {row['severity']} | "
             f"**Time:** {row['timestamp']}"
         )
+
+
+# ============================================
+# AI Explainability
+# ============================================
+
+st.divider()
+
+st.subheader("🧠 AI Explainability")
+
+
+st.write(
+    "Upload a face image to visualize "
+    "which regions influenced the Mask CNN prediction."
+)
+
+
+uploaded_image = st.file_uploader(
+    "Upload a mask/face image",
+    type=[
+        "jpg",
+        "jpeg",
+        "png"
+    ]
+)
+
+
+if uploaded_image is not None:
+
+    file_bytes = np.asarray(
+        bytearray(
+            uploaded_image.read()
+        ),
+        dtype=np.uint8
+    )
+
+    image = cv2.imdecode(
+        file_bytes,
+        cv2.IMREAD_COLOR
+    )
+
+    if image is None:
+
+        st.error(
+            "Unable to read the uploaded image."
+        )
+
+    else:
+
+        try:
+
+            overlay, prediction, confidence_score, heatmap = (
+                gradcam.generate(image)
+            )
+
+            explain_col1, explain_col2 = (
+                st.columns(2)
+            )
+
+            with explain_col1:
+
+                st.image(
+                    cv2.cvtColor(
+                        image,
+                        cv2.COLOR_BGR2RGB
+                    ),
+                    caption="Original Image",
+                    use_container_width=True
+                )
+
+            with explain_col2:
+
+                st.image(
+                    cv2.cvtColor(
+                        overlay,
+                        cv2.COLOR_BGR2RGB
+                    ),
+                    caption="Grad-CAM Explanation",
+                    use_container_width=True
+                )
+
+            st.success(
+                f"Prediction: **{prediction}**  \n"
+                f"Confidence: **{confidence_score:.2%}**"
+            )
+
+        except Exception as error:
+
+            st.error(
+                f"Grad-CAM failed: {error}"
+            )

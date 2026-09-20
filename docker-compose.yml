@@ -1,0 +1,21 @@
+services:
+
+  safevision:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: safevision
+
+    ports:
+      - "8501:8501"
+
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./runs:/app/runs
+
+    environment:
+      PYTHONUNBUFFERED: "1"
+
+    restart: unless-stopped

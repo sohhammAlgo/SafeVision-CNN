@@ -1,27 +1,84 @@
 import cv2
 
 
+def draw_label(
+    image,
+    text,
+    x1,
+    y1,
+    color,
+    font_scale=0.5
+):
+    """
+    Draw a readable label above a bounding box.
+    If there is not enough space above the box,
+    place the label inside the box.
+    """
+
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    thickness = 2
+
+    (text_width, text_height), baseline = cv2.getTextSize(
+        text,
+        font,
+        font_scale,
+        thickness
+    )
+
+    label_x = max(x1, 0)
+
+    label_y = y1 - 5
+
+    if label_y - text_height - baseline < 0:
+        label_y = y1 + text_height + baseline + 5
+
+    # Background rectangle
+    cv2.rectangle(
+        image,
+        (
+            label_x,
+            label_y - text_height - baseline
+        ),
+        (
+            label_x + text_width + 6,
+            label_y + 3
+        ),
+        color,
+        -1
+    )
+
+    # Text
+    cv2.putText(
+        image,
+        text,
+        (label_x + 3, label_y),
+        font,
+        font_scale,
+        (255, 255, 255),
+        thickness,
+        cv2.LINE_AA
+    )
+
+
 def draw_detections(frame, pipeline_output):
-    """
-    Draw person and PPE detections with
-    compliance information.
-    """
 
     output = frame.copy()
 
-    # ========================================
-    # Draw PPE detections
-    # ========================================
+    # ============================================
+    # PPE detections
+    # ============================================
 
     for detection in pipeline_output["ppe_detections"]:
 
         x1, y1, x2, y2 = detection.bbox
 
+        color = (255, 165, 0)
+
         cv2.rectangle(
             output,
             (x1, y1),
             (x2, y2),
-            (255, 165, 0),
+            color,
             2
         )
 
@@ -30,19 +87,18 @@ def draw_detections(frame, pipeline_output):
             f"{detection.confidence:.2f}"
         )
 
-        cv2.putText(
+        draw_label(
             output,
             label,
-            (x1, max(y1 - 5, 15)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (255, 165, 0),
-            2
+            x1,
+            y1,
+            color,
+            font_scale=0.5
         )
 
-    # ========================================
-    # Draw persons
-    # ========================================
+    # ============================================
+    # Person detections
+    # ============================================
 
     for item in pipeline_output["persons"]:
 
@@ -53,7 +109,6 @@ def draw_detections(frame, pipeline_output):
 
         # Green = compliant
         # Red = violation
-
         if compliance.compliant:
             box_color = (0, 255, 0)
         else:
@@ -67,14 +122,15 @@ def draw_detections(frame, pipeline_output):
             3
         )
 
-        # ====================================
-        # Label
-        # ====================================
+        # ========================================
+        # Person status label
+        # ========================================
 
         if compliance.compliant:
 
             label = (
-                f"ID {track.track_id} | COMPLIANT"
+                f"ID {track.track_id} | "
+                f"COMPLIANT"
             )
 
         else:
@@ -88,14 +144,13 @@ def draw_detections(frame, pipeline_output):
                 f"MISSING: {missing}"
             )
 
-        cv2.putText(
+        draw_label(
             output,
             label,
-            (x1, max(y1 - 10, 20)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
+            x1,
+            y1,
             box_color,
-            2
+            font_scale=0.6
         )
 
     return output
